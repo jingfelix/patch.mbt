@@ -1,0 +1,7 @@
+// import {
+//   "username/patch" @lib,
+// }
+
+options(
+  "is-main": true,
+)
