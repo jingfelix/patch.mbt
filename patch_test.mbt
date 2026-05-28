@@ -1,3 +1,7 @@
-// Blackbox tests run against the package's public API. Use `@patch` to import.
-// Prefer high-level behaviors over implementation details.
-// Run `moon test` to execute and `moon test --update` to refresh snapshots.
+///|
+test "public facade exposes parser and applier" {
+  let patch = @patch.parse_patch("")
+  assert_eq(patch.diffs.length(), 0)
+  let result = @patch.apply_patch([], patch)
+  assert_eq(result.lines.length(), 0)
+}

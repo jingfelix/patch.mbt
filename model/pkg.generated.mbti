@@ -1,0 +1,76 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "jingfelix/patch/model"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn empty_metadata() -> PatchMetadata
+
+pub fn empty_patch(String) -> Patch
+
+// Errors
+
+// Types and methods
+pub(all) struct Change {
+  old : Int?
+  new : Int?
+  line : String?
+  hunk : Int
+  kind : LineKind
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Diff {
+  header : Header?
+  hunks : Array[Hunk]
+  changes : Array[Change]
+  text : String
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Header {
+  index_path : String?
+  old_path : String?
+  old_version : String?
+  new_path : String?
+  new_version : String?
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Hunk {
+  index : Int
+  old_start : Int
+  old_count : Int
+  new_start : Int
+  new_count : Int
+  changes : Array[Change]
+} derive(Eq, @debug.Debug)
+
+pub(all) enum LineKind {
+  Context
+  Insert
+  Delete
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Patch {
+  metadata : PatchMetadata
+  diffs : Array[Diff]
+  text : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum PatchError {
+  ParseError(String)
+  ApplyError(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct PatchMetadata {
+  sha : String?
+  author : String?
+  date : String?
+  subject : String?
+  message : String?
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+

@@ -1,1 +1,5 @@
-
+import {
+  "jingfelix/patch/apply",
+  "jingfelix/patch/model",
+  "jingfelix/patch/parse",
+}

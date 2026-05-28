@@ -1,3 +1,6 @@
-// Whitebox tests run within the package scope.
-// Use them to validate internal helpers or invariants.
-// Keep them focused; public behavior belongs in `_test.mbt`.
+///|
+test "default reverse facade uses fuzz two" {
+  let patch = parse_patch("")
+  let result = reverse_patch([], patch)
+  assert_eq(result.fuzz, 2)
+}
