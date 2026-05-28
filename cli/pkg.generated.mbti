@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "jingfelix/patch/cli"
+
+import {
+  "moonbitlang/core/argparse",
+}
+
+// Values
+pub fn color_added(String) -> String
+
+pub fn color_path(String) -> String
+
+pub fn color_removed(String) -> String
+
+pub fn command() -> @argparse.Command
+
+pub fn run() -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

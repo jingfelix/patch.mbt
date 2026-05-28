@@ -7,5 +7,7 @@ MoonBit patch parsing and applying library.
 - `model`: public patch data model shared by parser and applier.
 - `parse`: whatthepatch-style parser entry points.
 - `apply`: apply, reverse, and fuzz-aware patch application entry points.
+- `cli`: command-line surface built with `moonbitlang/core/argparse` and
+  `xingwangzhe/style_print`.
 - `tests/integration`: end-to-end tests that exercise the public facade.
 - `tests/fixtures`: patch and file fixtures based on the reference projects.

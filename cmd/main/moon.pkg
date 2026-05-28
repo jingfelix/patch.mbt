@@ -1,6 +1,6 @@
-// import {
-//   "jingfelix/patch" @lib,
-// }
+import {
+  "jingfelix/patch/cli",
+}
 
 options(
   "is-main": true,

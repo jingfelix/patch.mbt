@@ -22,3 +22,7 @@ license = "MIT"
 keywords = [ ]
 
 description = ""
+
+import {
+  "xingwangzhe/style_print@0.1.7",
+}
