@@ -10,7 +10,7 @@ pub fn apply_patch(
   lines : Array[String],
   patch : @model.Patch,
   options? : @apply.ApplyOptions = @apply.ApplyOptions::default(),
-) -> @apply.ApplyResult {
+) -> @model.ApplyResult {
   @apply.apply_patch(lines, patch, options~)
 }
 
@@ -20,6 +20,6 @@ pub fn reverse_patch(
   lines : Array[String],
   patch : @model.Patch,
   fuzz? : Int = 2,
-) -> @apply.ApplyResult {
+) -> @model.ApplyResult {
   @apply.reverse_patch(lines, patch, fuzz~)
 }

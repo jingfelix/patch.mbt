@@ -7,11 +7,11 @@ import {
 }
 
 // Values
-pub fn apply_patch(Array[String], @model.Patch, options? : @apply.ApplyOptions) -> @apply.ApplyResult
+pub fn apply_patch(Array[String], @model.Patch, options? : @apply.ApplyOptions) -> @model.ApplyResult
 
 pub fn parse_patch(String) -> @model.Patch
 
-pub fn reverse_patch(Array[String], @model.Patch, fuzz? : Int) -> @apply.ApplyResult
+pub fn reverse_patch(Array[String], @model.Patch, fuzz? : Int) -> @model.ApplyResult
 
 // Errors
 

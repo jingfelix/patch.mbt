@@ -6,26 +6,46 @@ import {
 }
 
 // Values
-pub fn empty_metadata() -> PatchMetadata
+pub fn changes_to_hunks(Array[Change]) -> Array[Hunk]
+
+pub fn empty_apply_result(Array[String]) -> ApplyResult
 
 pub fn empty_patch(String) -> Patch
+
+pub fn lines_from_strings(Array[String]) -> Array[Line]
 
 // Errors
 
 // Types and methods
+pub(all) struct AppliedHunk {
+  index : Int
+  offset : Int
+  fuzz : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ApplyResult {
+  new_line_list : Array[Line]
+  applied_hunks : Array[AppliedHunk]
+  conflict_hunk_num_list : Array[Int]
+  failed_hunk_list : Array[Hunk]
+} derive(Eq, @debug.Debug)
+
 pub(all) struct Change {
   old : Int?
   new : Int?
   line : String?
   hunk : Int
-  kind : LineKind
 } derive(Eq, @debug.Debug)
+pub fn Change::context(Int, Int, String, Int) -> Self
+pub fn Change::delete(Int, String, Int) -> Self
+pub fn Change::insert(Int, String, Int) -> Self
+pub fn Change::is_context(Self) -> Bool
 
 pub(all) struct Diff {
   header : Header?
-  hunks : Array[Hunk]
   changes : Array[Change]
   text : String
+  hunks : Array[Hunk]
 } derive(Eq, @debug.Debug)
 
 pub(all) struct Header {
@@ -38,21 +58,28 @@ pub(all) struct Header {
 
 pub(all) struct Hunk {
   index : Int
-  old_start : Int
-  old_count : Int
-  new_start : Int
-  new_count : Int
-  changes : Array[Change]
+  context : Array[Change]
+  middle : Array[Change]
+  post : Array[Change]
+  all_ : Array[Change]
 } derive(Eq, @debug.Debug)
 
-pub(all) enum LineKind {
-  Context
-  Insert
-  Delete
+pub(all) struct Line {
+  index : Int
+  content : String
+  changed : Bool
+  status : Bool
+  flag : Bool
+  hunk : Int?
 } derive(Eq, @debug.Debug)
+pub fn Line::new(Int, String) -> Self
 
 pub(all) struct Patch {
-  metadata : PatchMetadata
+  sha : String?
+  author : String?
+  date : String?
+  subject : String?
+  message : String?
   diffs : Array[Diff]
   text : String
 } derive(Eq, @debug.Debug)
@@ -60,14 +87,6 @@ pub(all) struct Patch {
 pub(all) enum PatchError {
   ParseError(String)
   ApplyError(String)
-} derive(Eq, @debug.Debug)
-
-pub(all) struct PatchMetadata {
-  sha : String?
-  author : String?
-  date : String?
-  subject : String?
-  message : String?
 } derive(Eq, @debug.Debug)
 
 // Type aliases
