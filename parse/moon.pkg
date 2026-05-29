@@ -1,3 +1,4 @@
 import {
   "jingfelix/patch/model",
+  "moonbitlang/core/string",
 }
