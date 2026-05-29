@@ -16,6 +16,8 @@ pub fn command() -> @argparse.Command
 
 pub fn run() -> Unit
 
+pub fn show_text(String) -> String
+
 // Errors
 
 // Types and methods

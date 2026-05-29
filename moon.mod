@@ -25,4 +25,5 @@ description = ""
 
 import {
   "xingwangzhe/style_print@0.1.7",
+  "moonbitlang/x@0.4.44",
 }

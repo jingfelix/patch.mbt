@@ -1,4 +1,7 @@
 import {
   "moonbitlang/core/argparse",
+  "moonbitlang/x/fs",
+  "jingfelix/patch/model",
+  "jingfelix/patch/parse",
   "xingwangzhe/style_print",
 }
