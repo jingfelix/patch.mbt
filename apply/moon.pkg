@@ -2,3 +2,7 @@ import {
   "jingfelix/patch/model",
   "moonbitlang/core/debug",
 }
+
+import {
+  "jingfelix/patch/parse",
+} for "test"
