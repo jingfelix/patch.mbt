@@ -62,3 +62,71 @@ test "parse unified diff groups hunks" {
 test "parse_diffs returns empty for text without unified headers" {
   assert_eq(@parse.parse_diffs("not a patch").length(), 0)
 }
+
+///|
+let git_log_fixture =
+  #|commit abcdef1234567890
+  #|Author: Alice Example <alice@example.com>
+  #|Date:   Thu May 28 10:00:00 2026 +0000
+  #|
+  #|    demo: change greeting
+  #|
+  #|    Body line.
+  #|
+  #|diff --git a/src/hello.txt b/src/hello.txt
+  #|index 1111111..2222222 100644
+  #|--- a/src/hello.txt
+  #|+++ b/src/hello.txt
+  #|@@ -1 +1 @@
+  #|-old
+  #|+new
+  #|
+
+///|
+test "parse git log metadata and file diff" {
+  let patch = @parse.parse_patch(git_log_fixture)
+  assert_true(patch.sha is Some("abcdef1234567890"))
+  assert_true(patch.author is Some("Alice Example <alice@example.com>"))
+  assert_true(patch.date is Some("Thu May 28 10:00:00 2026 +0000"))
+  assert_true(patch.subject is Some("demo: change greeting"))
+  guard patch.message is Some(message) else { panic() }
+  assert_true(message.has_prefix("commit abcdef1234567890"))
+  assert_eq(patch.diffs.length(), 1)
+  guard patch.diffs[0].header is Some(header) else { panic() }
+  assert_true(header.index_path is Some("src/hello.txt"))
+  assert_true(header.old_path is Some("a/src/hello.txt"))
+  assert_true(header.new_path is Some("b/src/hello.txt"))
+}
+
+///|
+let format_patch_fixture =
+  #|From abcdef1234567890 Mon Sep 17 00:00:00 2001
+  #|From: Alice Example <alice@example.com>
+  #|Date: Thu, 28 May 2026 10:00:00 +0000
+  #|Subject: demo: change greeting
+  #|MIME-Version: 1.0
+  #|
+  #|Body line.
+  #|---
+  #| src/hello.txt | 2 +-
+  #| 1 file changed, 1 insertion(+), 1 deletion(-)
+  #|
+  #|diff --git a/src/hello.txt b/src/hello.txt
+  #|index 1111111..2222222 100644
+  #|--- a/src/hello.txt
+  #|+++ b/src/hello.txt
+  #|@@ -1 +1 @@
+  #|-old
+  #|+new
+  #|
+
+///|
+test "parse format-patch metadata before separator" {
+  let patch = @parse.parse_patch(format_patch_fixture)
+  assert_true(patch.sha is Some("abcdef1234567890"))
+  assert_true(patch.author is Some("Alice Example <alice@example.com>"))
+  assert_true(patch.date is Some("Thu, 28 May 2026 10:00:00 +0000"))
+  assert_true(patch.subject is Some("demo: change greeting"))
+  assert_eq(patch.diffs.length(), 1)
+  assert_eq(patch.diffs[0].changes.length(), 2)
+}
