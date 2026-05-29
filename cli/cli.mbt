@@ -30,6 +30,12 @@ pub fn command() -> @argparse.Command {
             default_values=["2"],
             about="Maximum context lines to ignore while matching hunks.",
           ),
+          @argparse.OptionArg(
+            "source",
+            short='s',
+            required=true,
+            about="Source file to patch. The patched content is written to stdout.",
+          ),
         ],
         positionals=[
           @argparse.PositionArg("patch-file", about="Patch file to apply."),
@@ -63,9 +69,28 @@ pub fn show_text(text : String) -> String {
 }
 
 ///|
+pub fn apply_text(
+  patch_text : String,
+  source_text : String,
+  reverse? : Bool = false,
+  fuzz? : Int = 2,
+) -> String {
+  let patch = @parse.parse_patch(patch_text)
+  let result = @apply.apply_patch(split_lines(source_text), patch, options={
+    reverse,
+    fuzz,
+  })
+  if result.failed_hunk_list.length() > 0 {
+    "error: failed to apply \{result.failed_hunk_list.length()} hunk(s)"
+  } else {
+    join_lines(result.new_line_list.map(line => line.content))
+  }
+}
+
+///|
 fn dispatch(matches : @argparse.Matches) -> Unit {
   match matches.subcommand {
-    Some(("apply", _)) => println(color_added("apply command scaffold ready"))
+    Some(("apply", apply)) => dispatch_apply(apply)
     Some(("show", show)) =>
       match first_value(show, "patch-file") {
         Some(path) =>
@@ -78,6 +103,25 @@ fn dispatch(matches : @argparse.Matches) -> Unit {
         None => println(color_removed("error: missing patch file"))
       }
     _ => println(color_removed("unknown command"))
+  }
+}
+
+///|
+fn dispatch_apply(matches : @argparse.Matches) -> Unit {
+  match (first_value(matches, "patch-file"), first_value(matches, "source")) {
+    (Some(patch_path), Some(source_path)) =>
+      println(
+        apply_text(
+          @fs.read_file_to_string(patch_path),
+          @fs.read_file_to_string(source_path),
+          reverse=flag_enabled(matches, "reverse"),
+          fuzz=parse_fuzz(matches),
+        ),
+      ) catch {
+        _ =>
+          println(color_removed("error: failed to read patch or source file"))
+      }
+    (_, _) => println(color_removed("error: missing patch or source file"))
   }
 }
 
@@ -114,6 +158,22 @@ fn first_value(matches : @argparse.Matches, name : String) -> String? {
   match matches.values.get(name) {
     Some(values) => if values.length() > 0 { Some(values[0]) } else { None }
     None => None
+  }
+}
+
+///|
+fn flag_enabled(matches : @argparse.Matches, name : String) -> Bool {
+  match matches.flags.get(name) {
+    Some(enabled) => enabled
+    None => false
+  }
+}
+
+///|
+fn parse_fuzz(matches : @argparse.Matches) -> Int {
+  match first_value(matches, "fuzz") {
+    Some(text) => @string.parse_int(text) catch { _ => 2 }
+    None => 2
   }
 }
 
@@ -166,4 +226,32 @@ fn removed_count(changes : Array[@model.Change]) -> Int {
     }
   }
   count
+}
+
+///|
+fn split_lines(text : String) -> Array[String] {
+  let parts = text.split("\n").map(line => line.to_owned()).collect()
+  if parts.length() > 0 && parts[parts.length() - 1] == "" {
+    slice_lines(parts, 0, parts.length() - 1)
+  } else {
+    parts
+  }
+}
+
+///|
+fn join_lines(lines : Array[String]) -> String {
+  if lines.length() == 0 {
+    ""
+  } else {
+    lines.join("\n")
+  }
+}
+
+///|
+fn slice_lines(lines : Array[String], start : Int, end : Int) -> Array[String] {
+  let result : Array[String] = []
+  for i in start..<end {
+    result.push(lines[i])
+  }
+  result
 }

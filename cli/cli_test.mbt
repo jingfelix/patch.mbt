@@ -24,7 +24,8 @@ test "cli renders top-level help" {
 test "cli parses apply options" {
   let matches = @cli.command().parse(
     argv=[
-      "apply", "--reverse", "--fuzz", "1", "tests/fixtures/diff-unified.diff",
+      "apply", "--reverse", "--fuzz", "1", "--source", "tests/fixtures/tzu.txt",
+      "tests/fixtures/diff-unified.diff",
     ],
     env={},
   ) catch {
@@ -34,7 +35,12 @@ test "cli parses apply options" {
     matches.subcommand is Some(("apply", apply)) &&
     apply.flags is { "reverse": true, .. } &&
     apply.values
-    is { "fuzz": ["1"], "patch-file": ["tests/fixtures/diff-unified.diff"], .. },
+    is {
+      "fuzz": ["1"],
+      "source": ["tests/fixtures/tzu.txt"],
+      "patch-file": ["tests/fixtures/diff-unified.diff"],
+      ..
+    },
   )
 }
 
@@ -73,6 +79,65 @@ test "show_text summarizes parsed patch" {
       #|files: 1
       #|  src/hello.txt: 1 hunk, +2 -1
     ),
+  )
+}
+
+///|
+test "apply_text applies patch to source text" {
+  let patch_text =
+    #|--- old.txt
+    #|+++ new.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_text(patch_text, "one\ntwo\nthree\n"),
+    content=(
+      #|one
+      #|TWO
+      #|three
+    ),
+  )
+}
+
+///|
+test "apply_text supports reverse" {
+  let patch_text =
+    #|--- old.txt
+    #|+++ new.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_text(patch_text, "one\nTWO\nthree\n", reverse=true),
+    content=(
+      #|one
+      #|two
+      #|three
+    ),
+  )
+}
+
+///|
+test "apply_text reports failed hunks" {
+  let patch_text =
+    #|--- old.txt
+    #|+++ new.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_text(patch_text, "not matching\n"),
+    content="error: failed to apply 1 hunk(s)",
   )
 }
 

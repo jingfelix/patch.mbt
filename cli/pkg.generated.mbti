@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn apply_text(String, String, reverse? : Bool, fuzz? : Int) -> String
+
 pub fn color_added(String) -> String
 
 pub fn color_path(String) -> String
