@@ -130,3 +130,111 @@ test "parse format-patch metadata before separator" {
   assert_eq(patch.diffs.length(), 1)
   assert_eq(patch.diffs[0].changes.length(), 2)
 }
+
+///|
+let context_diff_fixture =
+  #|*** old.txt	Fri May 29 18:48:37 2026
+  #|--- new.txt	Fri May 29 18:48:37 2026
+  #|***************
+  #|*** 1,3 ****
+  #|  one
+  #|! two
+  #|  three
+  #|--- 1,4 ----
+  #|  one
+  #|! TWO
+  #|  three
+  #|+ four
+  #|
+
+///|
+test "parse context diff into normalized changes" {
+  let patch = @parse.parse_patch(context_diff_fixture)
+  assert_eq(patch.diffs.length(), 1)
+  let diff = patch.diffs[0]
+  guard diff.header is Some(header) else { panic() }
+  assert_true(header.old_path is Some("old.txt"))
+  assert_true(header.new_path is Some("new.txt"))
+  assert_eq(diff.hunks.length(), 1)
+  assert_eq(diff.changes.length(), 5)
+  assert_true(diff.changes[0].old is Some(1))
+  assert_true(diff.changes[0].new is Some(1))
+  assert_true(diff.changes[1].old is Some(2))
+  assert_true(diff.changes[1].new is None)
+  assert_true(diff.changes[2].old is None)
+  assert_true(diff.changes[2].new is Some(2))
+  assert_true(diff.changes[4].old is None)
+  assert_true(diff.changes[4].new is Some(4))
+}
+
+///|
+let normal_diff_fixture =
+  #|2c2
+  #|< two
+  #|---
+  #|> TWO
+  #|3a4
+  #|> four
+  #|
+
+///|
+test "parse normal diff commands" {
+  let patch = @parse.parse_patch(normal_diff_fixture)
+  assert_eq(patch.diffs.length(), 1)
+  let diff = patch.diffs[0]
+  assert_true(diff.header is None)
+  assert_eq(diff.hunks.length(), 2)
+  assert_eq(diff.changes.length(), 3)
+  assert_true(diff.changes[0].old is Some(2))
+  assert_true(diff.changes[0].new is None)
+  assert_true(diff.changes[1].old is None)
+  assert_true(diff.changes[1].new is Some(2))
+  assert_true(diff.changes[2].old is None)
+  assert_true(diff.changes[2].new is Some(4))
+}
+
+///|
+let svn_diff_fixture =
+  #|Index: src/hello.txt
+  #|===================================================================
+  #|--- src/hello.txt	(revision 1)
+  #|+++ src/hello.txt	(working copy)
+  #|@@ -1 +1 @@
+  #|-old
+  #|+new
+  #|
+
+///|
+test "parse svn style index header" {
+  let patch = @parse.parse_patch(svn_diff_fixture)
+  assert_eq(patch.diffs.length(), 1)
+  guard patch.diffs[0].header is Some(header) else { panic() }
+  assert_true(header.index_path is Some("src/hello.txt"))
+  assert_true(header.old_path is Some("src/hello.txt"))
+  assert_true(header.old_version is Some("(revision 1)"))
+  assert_true(header.new_version is Some("(working copy)"))
+  assert_eq(patch.diffs[0].changes.length(), 2)
+}
+
+///|
+let git_binary_fixture =
+  #|diff --git a/image.bin b/image.bin
+  #|new file mode 100644
+  #|index 0000000..1111111
+  #|GIT binary patch
+  #|literal 3
+  #|KcmZQz
+  #|
+
+///|
+test "parse git binary patch as non-applicable diff" {
+  let patch = @parse.parse_patch(git_binary_fixture)
+  assert_eq(patch.diffs.length(), 1)
+  guard patch.diffs[0].header is Some(header) else { panic() }
+  assert_true(header.index_path is Some("image.bin"))
+  assert_true(header.old_path is Some("a/image.bin"))
+  assert_true(header.new_path is Some("b/image.bin"))
+  assert_eq(patch.diffs[0].changes.length(), 0)
+  assert_eq(patch.diffs[0].hunks.length(), 0)
+  assert_true(patch.diffs[0].text.has_prefix("diff --git"))
+}
