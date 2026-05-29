@@ -16,7 +16,7 @@ pub fn ApplyOptions::reverse(fuzz? : Int = 2) -> ApplyOptions {
 }
 
 ///|
-/// Apply all diffs in a patch. The implementation will support reverse and fuzz.
+/// Apply all diffs in a patch.
 pub fn apply_patch(
   lines : Array[String],
   patch : @model.Patch,
@@ -33,17 +33,16 @@ pub fn apply_patch(
       } else {
         hunk.all_
       }
-      match apply_hunk(target, changes, offset) {
-        Some(new_target) => {
-          let applied_offset = offset
-          offset = offset +
+      match apply_hunk(target, changes, offset, options.fuzz) {
+        Some((new_target, applied_offset, applied_fuzz)) => {
+          offset = applied_offset +
             new_lines(changes).length() -
             old_lines(changes).length()
           target = new_target
           applied_hunks.push({
             index: hunk.index,
             offset: applied_offset,
-            fuzz: 0,
+            fuzz: applied_fuzz,
           })
         }
         None => failed_hunks.push(hunk)
@@ -73,16 +72,34 @@ fn apply_hunk(
   target : Array[String],
   changes : Array[@model.Change],
   offset : Int,
-) -> Array[String]? {
+  max_fuzz : Int,
+) -> (Array[String], Int, Int)? {
   match hunk_position(changes) {
     Some(base_pos) => {
-      let pos = base_pos + offset
-      if matches_old_lines(target, pos, changes) {
-        let replacement = new_lines(changes)
-        Some(replace_range(target, pos, old_line_count(changes), replacement))
-      } else {
-        None
+      let leading_context = leading_context_count(changes)
+      let trailing_context = trailing_context_count(changes)
+      let max_fuzz = max_int(0, max_fuzz)
+      for fuzz in 0..<(max_fuzz + 1) {
+        let trim_start = min_int(fuzz, leading_context)
+        let trim_end = min_int(fuzz, trailing_context)
+        let candidate = trim_changes(changes, trim_start, trim_end)
+        match
+          find_match_pos(target, candidate, base_pos + offset + trim_start) {
+          Some(pos) => {
+            let replacement = new_lines(candidate)
+            let new_target = replace_range(
+              target,
+              pos,
+              old_line_count(candidate),
+              replacement,
+            )
+            let applied_offset = pos - trim_start - base_pos
+            return Some((new_target, applied_offset, fuzz))
+          }
+          None => ()
+        }
       }
+      None
     }
     None => None
   }
@@ -119,6 +136,45 @@ fn matches_old_lines(
     }
   }
   true
+}
+
+///|
+fn find_match_pos(
+  target : Array[String],
+  changes : Array[@model.Change],
+  expected_pos : Int,
+) -> Int? {
+  if changes.length() == 0 {
+    return None
+  }
+  if matches_old_lines(target, expected_pos, changes) {
+    return Some(expected_pos)
+  }
+  let old_count = old_line_count(changes)
+  if old_count == 0 {
+    if expected_pos >= 0 && expected_pos <= target.length() {
+      Some(expected_pos)
+    } else {
+      None
+    }
+  } else if old_count > target.length() {
+    None
+  } else {
+    let mut best : Int? = None
+    let end = target.length() - old_count + 1
+    for pos in 0..<end {
+      if matches_old_lines(target, pos, changes) {
+        match best {
+          Some(best_pos) =>
+            if distance(pos, expected_pos) < distance(best_pos, expected_pos) {
+              best = Some(pos)
+            }
+          None => best = Some(pos)
+        }
+      }
+    }
+    best
+  }
 }
 
 ///|
@@ -172,4 +228,67 @@ fn replace_range(
 ///|
 fn reverse_changes(changes : Array[@model.Change]) -> Array[@model.Change] {
   changes.map(change => { ..change, old: change.new, new: change.old })
+}
+
+///|
+fn trim_changes(
+  changes : Array[@model.Change],
+  trim_start : Int,
+  trim_end : Int,
+) -> Array[@model.Change] {
+  let result : Array[@model.Change] = []
+  let end = changes.length() - trim_end
+  if trim_start >= end {
+    return result
+  }
+  for i in trim_start..<end {
+    result.push(changes[i])
+  }
+  result
+}
+
+///|
+fn leading_context_count(changes : Array[@model.Change]) -> Int {
+  let mut count = 0
+  while count < changes.length() && changes[count].is_context() {
+    count = count + 1
+  }
+  count
+}
+
+///|
+fn trailing_context_count(changes : Array[@model.Change]) -> Int {
+  let mut count = 0
+  while count < changes.length() &&
+        changes[changes.length() - count - 1].is_context() {
+    count = count + 1
+  }
+  count
+}
+
+///|
+fn min_int(a : Int, b : Int) -> Int {
+  if a < b {
+    a
+  } else {
+    b
+  }
+}
+
+///|
+fn max_int(a : Int, b : Int) -> Int {
+  if a > b {
+    a
+  } else {
+    b
+  }
+}
+
+///|
+fn distance(a : Int, b : Int) -> Int {
+  if a > b {
+    a - b
+  } else {
+    b - a
+  }
 }

@@ -40,6 +40,28 @@ let unified_diff =
   #|
 
 ///|
+let shifted_diff =
+  #|--- source
+  #|+++ target
+  #|@@ -1,3 +1,3 @@
+  #| alpha
+  #|-beta
+  #|+BETA
+  #| gamma
+  #|
+
+///|
+let fuzzy_context_diff =
+  #|--- source
+  #|+++ target
+  #|@@ -1,3 +1,3 @@
+  #| old heading
+  #|-target
+  #|+replacement
+  #| old tail
+  #|
+
+///|
 fn line_contents(lines : Array[@model.Line]) -> Array[String] {
   lines.map(line => line.content)
 }
@@ -82,4 +104,66 @@ test "strict apply reports failed hunk on mismatch" {
   assert_eq(result.conflict_hunk_num_list.length(), 2)
   assert_eq(result.conflict_hunk_num_list[0], 1)
   assert_eq(result.conflict_hunk_num_list[1], 2)
+}
+
+///|
+test "apply finds exact hunk at offset" {
+  let patch = @parse.parse_patch(shifted_diff)
+  let result = @apply.apply_patch(["prefix", "alpha", "beta", "gamma"], patch, options={
+    reverse: false,
+    fuzz: 0,
+  })
+  assert_lines_eq(line_contents(result.new_line_list), [
+    "prefix", "alpha", "BETA", "gamma",
+  ])
+  assert_eq(result.failed_hunk_list.length(), 0)
+  assert_eq(result.applied_hunks.length(), 1)
+  assert_eq(result.applied_hunks[0].offset, 1)
+  assert_eq(result.applied_hunks[0].fuzz, 0)
+}
+
+///|
+test "apply uses fuzz to trim mismatched context" {
+  let patch = @parse.parse_patch(fuzzy_context_diff)
+  let result = @apply.apply_patch(
+    ["new heading", "target", "old tail"],
+    patch,
+    options={ reverse: false, fuzz: 1 },
+  )
+  assert_lines_eq(line_contents(result.new_line_list), [
+    "new heading", "replacement", "old tail",
+  ])
+  assert_eq(result.failed_hunk_list.length(), 0)
+  assert_eq(result.applied_hunks.length(), 1)
+  assert_eq(result.applied_hunks[0].fuzz, 1)
+}
+
+///|
+test "reverse uses fuzz to trim mismatched context" {
+  let patch = @parse.parse_patch(fuzzy_context_diff)
+  let result = @apply.reverse_patch(
+    ["new heading", "replacement", "old tail"],
+    patch,
+    fuzz=1,
+  )
+  assert_lines_eq(line_contents(result.new_line_list), [
+    "new heading", "target", "old tail",
+  ])
+  assert_eq(result.failed_hunk_list.length(), 0)
+  assert_eq(result.applied_hunks.length(), 1)
+  assert_eq(result.applied_hunks[0].fuzz, 1)
+}
+
+///|
+test "apply respects fuzz zero" {
+  let patch = @parse.parse_patch(fuzzy_context_diff)
+  let result = @apply.apply_patch(
+    ["new heading", "target", "old tail"],
+    patch,
+    options={ reverse: false, fuzz: 0 },
+  )
+  assert_lines_eq(line_contents(result.new_line_list), [
+    "new heading", "target", "old tail",
+  ])
+  assert_eq(result.failed_hunk_list.length(), 1)
 }
