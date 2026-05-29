@@ -33,8 +33,12 @@ pub fn command() -> @argparse.Command {
           @argparse.OptionArg(
             "source",
             short='s',
-            required=true,
             about="Source file to patch. The patched content is written to stdout.",
+          ),
+          @argparse.OptionArg(
+            "target",
+            short='d',
+            about="Target directory to update in place.",
           ),
         ],
         positionals=[
@@ -75,15 +79,79 @@ pub fn apply_text(
   reverse? : Bool = false,
   fuzz? : Int = 2,
 ) -> String {
+  let (ok, text, _failed_hunks) = apply_text_result(
+    patch_text,
+    source_text,
+    reverse~,
+    fuzz~,
+  )
+  if ok {
+    text
+  } else {
+    text
+  }
+}
+
+///|
+pub fn apply_to_target(
+  patch_text : String,
+  target_dir : String,
+  reverse? : Bool = false,
+  fuzz? : Int = 2,
+) -> String {
+  let patch = @parse.parse_patch(patch_text)
+  let mut applied_files = 0
+  let mut skipped_files = 0
+  let mut failed_hunks = 0
+  for diff in patch.diffs {
+    if diff.hunks.length() == 0 {
+      skipped_files = skipped_files + 1
+    } else {
+      match target_path(target_dir, diff, reverse) {
+        Some(path) =>
+          try {
+            let (ok, text, failed) = apply_diff_to_text(
+              diff,
+              @fs.read_file_to_string(path),
+              reverse~,
+              fuzz~,
+            )
+            if ok {
+              @fs.write_string_to_file(path, ensure_trailing_newline(text))
+              applied_files = applied_files + 1
+            } else {
+              failed_hunks = failed_hunks + failed
+            }
+          } catch {
+            _ => failed_hunks = failed_hunks + diff.hunks.length()
+          }
+        None => failed_hunks = failed_hunks + diff.hunks.length()
+      }
+    }
+  }
+  "applied \{applied_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
+}
+
+///|
+fn apply_text_result(
+  patch_text : String,
+  source_text : String,
+  reverse~ : Bool,
+  fuzz~ : Int,
+) -> (Bool, String, Int) {
   let patch = @parse.parse_patch(patch_text)
   let result = @apply.apply_patch(split_lines(source_text), patch, options={
     reverse,
     fuzz,
   })
   if result.failed_hunk_list.length() > 0 {
-    "error: failed to apply \{result.failed_hunk_list.length()} hunk(s)"
+    (
+      false,
+      "error: failed to apply \{result.failed_hunk_list.length()} hunk(s)",
+      result.failed_hunk_list.length(),
+    )
   } else {
-    join_lines(result.new_line_list.map(line => line.content))
+    (true, join_lines(result.new_line_list.map(line => line.content)), 0)
   }
 }
 
@@ -108,20 +176,37 @@ fn dispatch(matches : @argparse.Matches) -> Unit {
 
 ///|
 fn dispatch_apply(matches : @argparse.Matches) -> Unit {
-  match (first_value(matches, "patch-file"), first_value(matches, "source")) {
-    (Some(patch_path), Some(source_path)) =>
-      println(
-        apply_text(
-          @fs.read_file_to_string(patch_path),
-          @fs.read_file_to_string(source_path),
-          reverse=flag_enabled(matches, "reverse"),
-          fuzz=parse_fuzz(matches),
-        ),
-      ) catch {
+  match first_value(matches, "patch-file") {
+    Some(patch_path) =>
+      println(dispatch_apply_text(matches, @fs.read_file_to_string(patch_path))) catch {
         _ =>
           println(color_removed("error: failed to read patch or source file"))
       }
-    (_, _) => println(color_removed("error: missing patch or source file"))
+    None => println(color_removed("error: missing patch file"))
+  }
+}
+
+///|
+fn dispatch_apply_text(
+  matches : @argparse.Matches,
+  patch_text : String,
+) -> String {
+  let reverse = flag_enabled(matches, "reverse")
+  let fuzz = parse_fuzz(matches)
+  match (first_value(matches, "source"), first_value(matches, "target")) {
+    (Some(source_path), None) =>
+      apply_text(
+        patch_text,
+        @fs.read_file_to_string(source_path),
+        reverse~,
+        fuzz~,
+      ) catch {
+        _ => "error: failed to read source file"
+      }
+    (None, Some(target_dir)) =>
+      apply_to_target(patch_text, target_dir, reverse~, fuzz~)
+    (Some(_), Some(_)) => "error: choose either --source or --target"
+    (None, None) => "error: missing --source or --target"
   }
 }
 
@@ -150,6 +235,112 @@ fn push_optional(
   match value {
     Some(text) => lines.push("\{label}: \{text}")
     None => ()
+  }
+}
+
+///|
+fn apply_diff_to_text(
+  diff : @model.Diff,
+  source_text : String,
+  reverse~ : Bool,
+  fuzz~ : Int,
+) -> (Bool, String, Int) {
+  let patch : @model.Patch = { ..@model.empty_patch(""), diffs: [diff] }
+  let result = @apply.apply_patch(split_lines(source_text), patch, options={
+    reverse,
+    fuzz,
+  })
+  if result.failed_hunk_list.length() > 0 {
+    (false, "", result.failed_hunk_list.length())
+  } else {
+    (true, join_lines(result.new_line_list.map(line => line.content)), 0)
+  }
+}
+
+///|
+fn target_path(
+  target_dir : String,
+  diff : @model.Diff,
+  reverse : Bool,
+) -> String? {
+  match patch_file_path(diff, reverse) {
+    Some(path) =>
+      if is_safe_relative_path(path) {
+        Some(join_path(target_dir, path))
+      } else {
+        None
+      }
+    None => None
+  }
+}
+
+///|
+fn patch_file_path(diff : @model.Diff, reverse : Bool) -> String? {
+  match diff.header {
+    Some(header) =>
+      match header.index_path {
+        Some(path) => normalize_patch_path(path)
+        None =>
+          if reverse {
+            normalize_optional_patch_path(header.new_path)
+          } else {
+            normalize_optional_patch_path(header.old_path)
+          }
+      }
+    None => None
+  }
+}
+
+///|
+fn normalize_optional_patch_path(path : String?) -> String? {
+  match path {
+    Some(path) => normalize_patch_path(path)
+    None => None
+  }
+}
+
+///|
+fn normalize_patch_path(path : String) -> String? {
+  if path == "/dev/null" {
+    None
+  } else {
+    match path.strip_prefix("a/") {
+      Some(rest) => Some(rest.to_owned())
+      None =>
+        match path.strip_prefix("b/") {
+          Some(rest) => Some(rest.to_owned())
+          None => Some(path)
+        }
+    }
+  }
+}
+
+///|
+fn is_safe_relative_path(path : String) -> Bool {
+  path != "" &&
+  !path.has_prefix("/") &&
+  path != ".." &&
+  !path.has_prefix("../") &&
+  !path.contains("/../")
+}
+
+///|
+fn join_path(dir : String, path : String) -> String {
+  if dir == "" || dir == "." {
+    path
+  } else if dir.has_suffix("/") {
+    dir + path
+  } else {
+    dir + "/" + path
+  }
+}
+
+///|
+fn ensure_trailing_newline(text : String) -> String {
+  if text == "" || text.has_suffix("\n") {
+    text
+  } else {
+    text + "\n"
   }
 }
 

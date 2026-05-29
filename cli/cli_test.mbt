@@ -45,6 +45,25 @@ test "cli parses apply options" {
 }
 
 ///|
+test "cli parses apply target option" {
+  let matches = @cli.command().parse(
+    argv=["apply", "--target", "tmp", "tests/fixtures/diff-unified.diff"],
+    env={},
+  ) catch {
+    _ => panic()
+  }
+  assert_true(
+    matches.subcommand is Some(("apply", apply)) &&
+    apply.values
+    is {
+      "target": ["tmp"],
+      "patch-file": ["tests/fixtures/diff-unified.diff"],
+      ..
+    },
+  )
+}
+
+///|
 test "cli parses show positional" {
   let matches = @cli.command().parse(
     argv=["show", "tests/fixtures/diff-unified.diff"],
@@ -142,7 +161,53 @@ test "apply_text reports failed hunks" {
 }
 
 ///|
+test "apply_to_target updates existing file" {
+  let dir = "tmp_cli_apply_target"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  @fs.write_string_to_file(path, "one\ntwo\nthree\n")
+  let patch_text =
+    #|--- old.txt
+    #|+++ old.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir),
+    content="applied 1 file(s), skipped 0 file(s), failed 0 hunk(s)",
+  )
+  inspect(
+    @fs.read_file_to_string(path),
+    content=(
+      #|one
+      #|TWO
+      #|three
+      #|
+    ),
+  )
+  cleanup_target_dir(dir, path)
+}
+
+///|
 test "diff colors emit ansi sequences" {
   assert_eq(color_added("+ added"), "\u001B[32m+ added\u001B[0m")
   assert_eq(color_removed("- removed"), "\u001B[31m- removed\u001B[0m")
+}
+
+///|
+fn cleanup_target_dir(dir : String, path : String) -> Unit {
+  if @fs.path_exists(path) {
+    @fs.remove_file(path) catch {
+      _ => ()
+    }
+  }
+  if @fs.path_exists(dir) {
+    @fs.remove_dir(dir) catch {
+      _ => ()
+    }
+  }
 }
