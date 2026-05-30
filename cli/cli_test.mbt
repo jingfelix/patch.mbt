@@ -178,7 +178,7 @@ test "apply_to_target updates existing file" {
     #|
   inspect(
     @cli.apply_to_target(patch_text, dir),
-    content="applied 1 file(s), skipped 0 file(s), failed 0 hunk(s)",
+    content="applied 1 file(s), created 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
   )
   inspect(
     @fs.read_file_to_string(path),
@@ -186,6 +186,34 @@ test "apply_to_target updates existing file" {
       #|one
       #|TWO
       #|three
+      #|
+    ),
+  )
+  cleanup_target_dir(dir, path)
+}
+
+///|
+test "apply_to_target creates new file" {
+  let dir = "tmp_cli_apply_create"
+  let path = "\{dir}/new.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  let patch_text =
+    #|--- /dev/null
+    #|+++ new.txt
+    #|@@ -0,0 +1,2 @@
+    #|+hello
+    #|+moonbit
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir),
+    content="applied 0 file(s), created 1 file(s), skipped 0 file(s), failed 0 hunk(s)",
+  )
+  inspect(
+    @fs.read_file_to_string(path),
+    content=(
+      #|hello
+      #|moonbit
       #|
     ),
   )

@@ -109,12 +109,12 @@ fn apply_hunk(
 fn hunk_position(changes : Array[@model.Change]) -> Int? {
   for change in changes {
     if change.old is Some(old) {
-      return Some(old - 1)
+      return Some(max_int(0, old - 1))
     }
   }
   for change in changes {
     if change.new is Some(new_) {
-      return Some(new_ - 1)
+      return Some(max_int(0, new_ - 1))
     }
   }
   None

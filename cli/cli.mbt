@@ -101,6 +101,7 @@ pub fn apply_to_target(
 ) -> String {
   let patch = @parse.parse_patch(patch_text)
   let mut applied_files = 0
+  let mut created_files = 0
   let mut skipped_files = 0
   let mut failed_hunks = 0
   for diff in patch.diffs {
@@ -112,13 +113,17 @@ pub fn apply_to_target(
           try {
             let (ok, text, failed) = apply_diff_to_text(
               diff,
-              @fs.read_file_to_string(path),
+              read_target_source(path, diff, reverse),
               reverse~,
               fuzz~,
             )
             if ok {
               @fs.write_string_to_file(path, ensure_trailing_newline(text))
-              applied_files = applied_files + 1
+              if is_new_file(diff, reverse) {
+                created_files = created_files + 1
+              } else {
+                applied_files = applied_files + 1
+              }
             } else {
               failed_hunks = failed_hunks + failed
             }
@@ -129,7 +134,7 @@ pub fn apply_to_target(
       }
     }
   }
-  "applied \{applied_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
+  "applied \{applied_files} file(s), created \{created_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
 }
 
 ///|
@@ -275,13 +280,46 @@ fn target_path(
 }
 
 ///|
+fn read_target_source(
+  path : String,
+  diff : @model.Diff,
+  reverse : Bool,
+) -> String raise {
+  if is_new_file(diff, reverse) {
+    ""
+  } else {
+    @fs.read_file_to_string(path)
+  }
+}
+
+///|
+fn is_new_file(diff : @model.Diff, reverse : Bool) -> Bool {
+  match diff.header {
+    Some(header) =>
+      if reverse {
+        false
+      } else {
+        header.old_path is Some("/dev/null")
+      }
+    None => false
+  }
+}
+
+///|
 fn patch_file_path(diff : @model.Diff, reverse : Bool) -> String? {
   match diff.header {
     Some(header) =>
       match header.index_path {
-        Some(path) => normalize_patch_path(path)
+        Some(path) =>
+          if is_new_file(diff, reverse) {
+            normalize_optional_patch_path(header.new_path)
+          } else {
+            normalize_patch_path(path)
+          }
         None =>
           if reverse {
+            normalize_optional_patch_path(header.new_path)
+          } else if is_new_file(diff, reverse) {
             normalize_optional_patch_path(header.new_path)
           } else {
             normalize_optional_patch_path(header.old_path)

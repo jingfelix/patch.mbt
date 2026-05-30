@@ -62,6 +62,15 @@ let fuzzy_context_diff =
   #|
 
 ///|
+let new_file_diff =
+  #|--- /dev/null
+  #|+++ new.txt
+  #|@@ -0,0 +1,2 @@
+  #|+hello
+  #|+moonbit
+  #|
+
+///|
 fn line_contents(lines : Array[@model.Line]) -> Array[String] {
   lines.map(line => line.content)
 }
@@ -166,4 +175,13 @@ test "apply respects fuzz zero" {
     "new heading", "target", "old tail",
   ])
   assert_eq(result.failed_hunk_list.length(), 1)
+}
+
+///|
+test "apply inserts into empty file for new file patch" {
+  let patch = @parse.parse_patch(new_file_diff)
+  let result = @apply.apply_patch([], patch)
+  assert_lines_eq(line_contents(result.new_line_list), ["hello", "moonbit"])
+  assert_eq(result.failed_hunk_list.length(), 0)
+  assert_eq(result.applied_hunks.length(), 1)
 }
