@@ -178,7 +178,7 @@ test "apply_to_target updates existing file" {
     #|
   inspect(
     @cli.apply_to_target(patch_text, dir),
-    content="applied 1 file(s), created 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
+    content="applied 1 file(s), created 0 file(s), deleted 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
   )
   inspect(
     @fs.read_file_to_string(path),
@@ -207,13 +207,63 @@ test "apply_to_target creates new file" {
     #|
   inspect(
     @cli.apply_to_target(patch_text, dir),
-    content="applied 0 file(s), created 1 file(s), skipped 0 file(s), failed 0 hunk(s)",
+    content="applied 0 file(s), created 1 file(s), deleted 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
   )
   inspect(
     @fs.read_file_to_string(path),
     content=(
       #|hello
       #|moonbit
+      #|
+    ),
+  )
+  cleanup_target_dir(dir, path)
+}
+
+///|
+test "apply_to_target deletes file" {
+  let dir = "tmp_cli_apply_delete"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  @fs.write_string_to_file(path, "one\ntwo\n")
+  let patch_text =
+    #|--- old.txt
+    #|+++ /dev/null
+    #|@@ -1,2 +0,0 @@
+    #|-one
+    #|-two
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir),
+    content="applied 0 file(s), created 0 file(s), deleted 1 file(s), skipped 0 file(s), failed 0 hunk(s)",
+  )
+  assert_false(@fs.path_exists(path))
+  cleanup_target_dir(dir, path)
+}
+
+///|
+test "apply_to_target reverse delete creates file" {
+  let dir = "tmp_cli_apply_reverse_delete"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  let patch_text =
+    #|--- old.txt
+    #|+++ /dev/null
+    #|@@ -1,2 +0,0 @@
+    #|-one
+    #|-two
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir, reverse=true),
+    content="applied 0 file(s), created 1 file(s), deleted 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
+  )
+  inspect(
+    @fs.read_file_to_string(path),
+    content=(
+      #|one
+      #|two
       #|
     ),
   )
