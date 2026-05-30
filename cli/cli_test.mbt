@@ -271,6 +271,47 @@ test "apply_to_target reverse delete creates file" {
 }
 
 ///|
+test "apply_to_target writes reject file on failed hunk" {
+  let dir = "tmp_cli_apply_reject"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  @fs.write_string_to_file(path, "not matching\n")
+  let patch_text =
+    #|--- old.txt
+    #|+++ old.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir, fuzz=0),
+    content="applied 0 file(s), created 0 file(s), deleted 0 file(s), skipped 0 file(s), failed 1 hunk(s)",
+  )
+  inspect(
+    @fs.read_file_to_string(path),
+    content=(
+      #|not matching
+      #|
+    ),
+  )
+  inspect(
+    @fs.read_file_to_string(path + ".rej"),
+    content=(
+      #|@@ rejected hunk 1 @@
+      #| one
+      #|-two
+      #|+TWO
+      #| three
+      #|
+    ),
+  )
+  cleanup_target_dir(dir, path)
+}
+
+///|
 test "diff colors emit ansi sequences" {
   assert_eq(color_added("+ added"), "\u001B[32m+ added\u001B[0m")
   assert_eq(color_removed("- removed"), "\u001B[31m- removed\u001B[0m")
@@ -278,6 +319,11 @@ test "diff colors emit ansi sequences" {
 
 ///|
 fn cleanup_target_dir(dir : String, path : String) -> Unit {
+  if @fs.path_exists(path + ".rej") {
+    @fs.remove_file(path + ".rej") catch {
+      _ => ()
+    }
+  }
   if @fs.path_exists(path) {
     @fs.remove_file(path) catch {
       _ => ()

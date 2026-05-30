@@ -131,7 +131,8 @@ pub fn apply_to_target(
                 }
               }
             } else {
-              failed_hunks = failed_hunks + failed
+              failed_hunks = failed_hunks + failed.length()
+              write_reject_file(path, failed, reverse)
             }
           } catch {
             _ => failed_hunks = failed_hunks + diff.hunks.length()
@@ -255,17 +256,59 @@ fn apply_diff_to_text(
   source_text : String,
   reverse~ : Bool,
   fuzz~ : Int,
-) -> (Bool, String, Int) {
+) -> (Bool, String, Array[@model.Hunk]) {
   let patch : @model.Patch = { ..@model.empty_patch(""), diffs: [diff] }
   let result = @apply.apply_patch(split_lines(source_text), patch, options={
     reverse,
     fuzz,
   })
   if result.failed_hunk_list.length() > 0 {
-    (false, "", result.failed_hunk_list.length())
+    (false, "", result.failed_hunk_list)
   } else {
-    (true, join_lines(result.new_line_list.map(line => line.content)), 0)
+    (true, join_lines(result.new_line_list.map(line => line.content)), [])
   }
+}
+
+///|
+fn write_reject_file(
+  target_path : String,
+  hunks : Array[@model.Hunk],
+  reverse : Bool,
+) -> Unit raise {
+  @fs.write_string_to_file(
+    target_path + ".rej",
+    render_reject_hunks(hunks, reverse),
+  )
+}
+
+///|
+fn render_reject_hunks(hunks : Array[@model.Hunk], reverse : Bool) -> String {
+  let lines : Array[String] = []
+  for hunk in hunks {
+    lines.push("@@ rejected hunk \{hunk.index} @@")
+    let changes = if reverse { reverse_changes(hunk.all_) } else { hunk.all_ }
+    for change in changes {
+      lines.push(render_reject_change(change))
+    }
+  }
+  ensure_trailing_newline(join_lines(lines))
+}
+
+///|
+fn render_reject_change(change : @model.Change) -> String {
+  let content = change.line.unwrap_or("")
+  if change.old is Some(_) && change.new is Some(_) {
+    " " + content
+  } else if change.old is Some(_) {
+    "-" + content
+  } else {
+    "+" + content
+  }
+}
+
+///|
+fn reverse_changes(changes : Array[@model.Change]) -> Array[@model.Change] {
+  changes.map(change => { ..change, old: change.new, new: change.old })
 }
 
 ///|
