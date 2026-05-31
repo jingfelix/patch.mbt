@@ -8,7 +8,7 @@ import {
 // Values
 pub fn apply_text(String, String, reverse? : Bool, fuzz? : Int) -> String
 
-pub fn apply_to_target(String, String, reverse? : Bool, fuzz? : Int) -> String
+pub fn apply_to_target(String, String, reverse? : Bool, fuzz? : Int, check? : Bool) -> String
 
 pub fn color_added(String) -> String
 

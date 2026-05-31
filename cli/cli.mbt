@@ -22,6 +22,10 @@ pub fn command() -> @argparse.Command {
             short='R',
             about="Apply the patch in reverse.",
           ),
+          @argparse.FlagArg(
+            "check",
+            about="Check whether the patch applies without writing changes.",
+          ),
         ],
         options=[
           @argparse.OptionArg(
@@ -98,6 +102,7 @@ pub fn apply_to_target(
   target_dir : String,
   reverse? : Bool = false,
   fuzz? : Int = 2,
+  check? : Bool = false,
 ) -> String {
   let patch = @parse.parse_patch(patch_text)
   let mut applied_files = 0
@@ -119,7 +124,15 @@ pub fn apply_to_target(
               fuzz~,
             )
             if ok {
-              if is_deleted_file(diff, reverse) {
+              if check {
+                if is_deleted_file(diff, reverse) {
+                  deleted_files = deleted_files + 1
+                } else if is_new_file(diff, reverse) {
+                  created_files = created_files + 1
+                } else {
+                  applied_files = applied_files + 1
+                }
+              } else if is_deleted_file(diff, reverse) {
                 @fs.remove_file(path)
                 deleted_files = deleted_files + 1
               } else {
@@ -132,7 +145,9 @@ pub fn apply_to_target(
               }
             } else {
               failed_hunks = failed_hunks + failed.length()
-              write_reject_file(path, failed, reverse)
+              if !check {
+                write_reject_file(path, failed, reverse)
+              }
             }
           } catch {
             _ => failed_hunks = failed_hunks + diff.hunks.length()
@@ -141,7 +156,14 @@ pub fn apply_to_target(
       }
     }
   }
-  "applied \{applied_files} file(s), created \{created_files} file(s), deleted \{deleted_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
+  target_summary(
+    applied_files,
+    created_files,
+    deleted_files,
+    skipped_files,
+    failed_hunks,
+    check~,
+  )
 }
 
 ///|
@@ -164,6 +186,22 @@ fn apply_text_result(
     )
   } else {
     (true, join_lines(result.new_line_list.map(line => line.content)), 0)
+  }
+}
+
+///|
+fn target_summary(
+  applied_files : Int,
+  created_files : Int,
+  deleted_files : Int,
+  skipped_files : Int,
+  failed_hunks : Int,
+  check~ : Bool,
+) -> String {
+  if check {
+    "checked \{applied_files} existing file(s), would create \{created_files} file(s), would delete \{deleted_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
+  } else {
+    "applied \{applied_files} file(s), created \{created_files} file(s), deleted \{deleted_files} file(s), skipped \{skipped_files} file(s), failed \{failed_hunks} hunk(s)"
   }
 }
 
@@ -216,7 +254,13 @@ fn dispatch_apply_text(
         _ => "error: failed to read source file"
       }
     (None, Some(target_dir)) =>
-      apply_to_target(patch_text, target_dir, reverse~, fuzz~)
+      apply_to_target(
+        patch_text,
+        target_dir,
+        reverse~,
+        fuzz~,
+        check=flag_enabled(matches, "check"),
+      )
     (Some(_), Some(_)) => "error: choose either --source or --target"
     (None, None) => "error: missing --source or --target"
   }

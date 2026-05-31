@@ -24,7 +24,7 @@ test "cli renders top-level help" {
 test "cli parses apply options" {
   let matches = @cli.command().parse(
     argv=[
-      "apply", "--reverse", "--fuzz", "1", "--source", "tests/fixtures/tzu.txt",
+      "apply", "--reverse", "--check", "--fuzz", "1", "--source", "tests/fixtures/tzu.txt",
       "tests/fixtures/diff-unified.diff",
     ],
     env={},
@@ -33,7 +33,7 @@ test "cli parses apply options" {
   }
   assert_true(
     matches.subcommand is Some(("apply", apply)) &&
-    apply.flags is { "reverse": true, .. } &&
+    apply.flags is { "reverse": true, "check": true, .. } &&
     apply.values
     is {
       "fuzz": ["1"],
@@ -308,6 +308,62 @@ test "apply_to_target writes reject file on failed hunk" {
       #|
     ),
   )
+  cleanup_target_dir(dir, path)
+}
+
+///|
+test "apply_to_target check does not modify existing file" {
+  let dir = "tmp_cli_apply_check"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  @fs.write_string_to_file(path, "one\ntwo\nthree\n")
+  let patch_text =
+    #|--- old.txt
+    #|+++ old.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir, check=true),
+    content="checked 1 existing file(s), would create 0 file(s), would delete 0 file(s), skipped 0 file(s), failed 0 hunk(s)",
+  )
+  inspect(
+    @fs.read_file_to_string(path),
+    content=(
+      #|one
+      #|two
+      #|three
+      #|
+    ),
+  )
+  cleanup_target_dir(dir, path)
+}
+
+///|
+test "apply_to_target check does not write reject file" {
+  let dir = "tmp_cli_apply_check_reject"
+  let path = "\{dir}/old.txt"
+  cleanup_target_dir(dir, path)
+  @fs.create_dir(dir)
+  @fs.write_string_to_file(path, "not matching\n")
+  let patch_text =
+    #|--- old.txt
+    #|+++ old.txt
+    #|@@ -1,3 +1,3 @@
+    #| one
+    #|-two
+    #|+TWO
+    #| three
+    #|
+  inspect(
+    @cli.apply_to_target(patch_text, dir, fuzz=0, check=true),
+    content="checked 0 existing file(s), would create 0 file(s), would delete 0 file(s), skipped 0 file(s), failed 1 hunk(s)",
+  )
+  assert_false(@fs.path_exists(path + ".rej"))
   cleanup_target_dir(dir, path)
 }
 
